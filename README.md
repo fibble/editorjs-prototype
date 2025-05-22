@@ -17,8 +17,8 @@ To install and run this demo locally:
 
 ```bash
 # Clone the repository (if applicable)
-git clone [repository-url]
-cd govuk-temp
+git clone git@github.com:fibble/editorjs-prototype.git
+cd editorjs-prototype
 
 # Install dependencies
 npm install
