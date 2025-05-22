@@ -1,0 +1,169 @@
+{% extends "layouts/main.html" %}
+
+{% block pageTitle %}
+  Edit Issues - VOL EditorJS Demo
+{% endblock %}
+
+{% block head %}
+  <!-- Add the GOV.UK application CSS -->
+  <link href="/public/stylesheets/application.css" rel="stylesheet" type="text/css" />
+  
+  <!-- Load Editor.js libraries from CDN with specific versions -->
+  <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@2.26.5/dist/editor.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@2.7.0/dist/bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@editorjs/paragraph@2.9.0/dist/bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@1.8.0/dist/bundle.min.js"></script>
+
+  <style>
+    /* Integration styles for EditorJS and GOV.UK Design System */
+    .govuk-editor-container {
+      margin-bottom: 30px;
+    }
+
+    .govuk-editor {
+      border: 2px solid #0b0c0c;
+      padding: 15px;
+    }
+
+    .govuk-editor:focus-within {
+      outline: 3px solid #ffdd00;
+      outline-offset: 0;
+    }
+
+    .codex-editor {
+      min-height: 200px;
+      font-family: "GDS Transport", arial, sans-serif;
+    }
+
+    /* Override EditorJS styles to match GOV.UK */
+    .ce-block__content, 
+    .ce-toolbar__content {
+      max-width: 100%;
+    }
+
+    .ce-paragraph {
+      font-size: 19px;
+      line-height: 1.31579;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-two-thirds">
+      <h1 class="govuk-heading-xl">Edit your responses</h1>
+
+      <p class="govuk-body">Use the editors below to provide details for each issue you selected. You can format your text using the tools provided.</p>
+
+      <form id="editor-form" action="/editorjs/editor" method="post">
+        {% for issue in selectedIssues %}
+          <div class="govuk-editor-container">
+            <h2 class="govuk-heading-m">{{ issue | replace("-", " ") | title }} Issues</h2>
+            <div class="govuk-form-group">
+              <div id="editor-{{ issue }}" class="govuk-editor"></div>
+              <input type="hidden" name="content[{{ issue }}]" id="content-{{ issue }}">
+            </div>
+          </div>
+        {% endfor %}
+
+        <button type="submit" class="govuk-button" data-module="govuk-button">
+          Save and continue
+        </button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block bodyEnd %}
+  <script>
+    // Wait for all scripts to load before initializing
+    window.onload = function() {
+      // Check if Editor.js core is loaded
+      if (typeof EditorJS === 'undefined') {
+        console.error('EditorJS is not loaded');
+        alert('Error loading the editor. Please refresh the page and try again.');
+        return;
+      }
+
+      // Create placeholders for editors
+      const editors = {};
+
+      // Initialize each editor
+      {% for issue in selectedIssues %}
+        try {
+          // Create a simple configuration with minimal tools
+          const editorConfig = {
+            holder: 'editor-{{ issue }}',
+            tools: {
+              header: Header,
+              paragraph: Paragraph,
+              list: List
+            },
+            data: {{ issueContent[issue] | dump | safe }},
+            autofocus: false,
+            placeholder: 'Type your content here...'
+          };
+
+          // Initialize the editor
+          editors['{{ issue }}'] = new EditorJS(editorConfig);
+          console.log('Editor initialized for {{ issue }}');
+        } catch (e) {
+          console.error('Failed to initialize editor for {{ issue }}:', e);
+        }
+      {% endfor %}
+
+      // Handle form submission
+      const form = document.getElementById('editor-form');
+
+      form.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        // Track editors being processed
+        let promises = [];
+
+        // Save content from each editor
+        {% for issue in selectedIssues %}
+          if (editors['{{ issue }}']) {
+            promises.push(
+              editors['{{ issue }}'].save()
+                .then(function(outputData) {
+                  // Store output in the hidden field
+                  const hiddenField = document.getElementById('content-{{ issue }}');
+                  hiddenField.value = JSON.stringify(outputData);
+                  console.log('Saved content for {{ issue }}');
+                })
+                .catch(function(error) {
+                  console.error('Error saving {{ issue }} content:', error);
+                  // Set a minimal valid JSON to prevent server errors
+                  document.getElementById('content-{{ issue }}').value = JSON.stringify({
+                    time: new Date().getTime(),
+                    blocks: [{
+                      type: 'paragraph',
+                      data: { text: 'Content could not be saved properly.' }
+                    }]
+                  });
+                })
+            );
+          } else {
+            // Editor failed to initialize, provide fallback empty data
+            document.getElementById('content-{{ issue }}').value = JSON.stringify({
+              time: new Date().getTime(),
+              blocks: []
+            });
+          }
+        {% endfor %}
+
+        // When all editors are processed, submit the form
+        Promise.all(promises)
+          .then(function() {
+            console.log('All editors saved, submitting form');
+            form.submit();
+          })
+          .catch(function() {
+            console.log('Some editors failed to save, submitting anyway');
+            form.submit();
+          });
+      });
+    };
+  </script>
+{% endblock %}
